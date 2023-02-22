@@ -5,10 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.TypeFactory;
-import com.nph.druid.result.BaseResultElement;
-import com.nph.druid.result.EventElement;
-import com.nph.druid.result.Page;
-import com.nph.druid.result.SelectResult;
+import com.nph.druid.result.*;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
@@ -45,13 +42,13 @@ public class DruidConnection {
         druidConnection.jsonMapper = new ObjectMapper();
 
         HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)
-                .responseTimeout(Duration.ofMillis(30000))
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 35000)
+                .responseTimeout(Duration.ofMillis(35000))
                 .doOnConnected(conn ->
-                        conn.addHandlerLast(new ReadTimeoutHandler(30000, TimeUnit.MILLISECONDS))
-                                .addHandlerLast(new WriteTimeoutHandler(30000, TimeUnit.MILLISECONDS)));
+                        conn.addHandlerLast(new ReadTimeoutHandler(35000, TimeUnit.MILLISECONDS))
+                                .addHandlerLast(new WriteTimeoutHandler(35000, TimeUnit.MILLISECONDS)));
         final ExchangeStrategies strategies = ExchangeStrategies.builder()
-                .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(50 * 1024 * 1024))
+                .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(100 * 1024 * 1024))
                 .build();
         druidConnection.webClient = WebClient.builder()
                 .exchangeStrategies(strategies)
@@ -60,17 +57,6 @@ public class DruidConnection {
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .build();
         return druidConnection;
-    }
-
-    @SneakyThrows
-    @Deprecated
-    public List<BaseResultElement> executeQuery(Query query) {
-        String req = null;
-        req = jsonMapper.writeValueAsString(query);
-        String result = executeQueryRRaw(req);
-        TypeReference<List<BaseResultElement>> typeReference = new TypeReference<List<BaseResultElement>>() {
-        };
-        return jsonMapper.readValue(result, typeReference);
     }
 
 
@@ -92,6 +78,24 @@ public class DruidConnection {
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(30))
                 .block();
+    }
+
+    @SneakyThrows
+    public <T> List<T> groupForList(Query query, Class<T> rType) {
+        String res = executeQueryRRaw(query);
+        TypeFactory typeFactory = jsonMapper.getTypeFactory();
+        JavaType javaType = typeFactory.constructCollectionLikeType(
+                List.class,
+                typeFactory.constructParametricType(
+                        GroupByBaseElement.class,
+                        rType
+                )
+        );
+        List<GroupByBaseElement<T>> result = jsonMapper.readValue(res, javaType);
+        return result
+                .stream()
+                .map(GroupByBaseElement::getEvent)
+                .collect(Collectors.toList());
     }
 
     @SneakyThrows
