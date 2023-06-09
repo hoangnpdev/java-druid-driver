@@ -1,7 +1,6 @@
 package com.nph.druid;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.TypeFactory;
@@ -30,35 +29,40 @@ public class DruidConnection {
 
     private static Logger log = LoggerFactory.getLogger(DruidConnection.class);
 
-    private ObjectMapper jsonMapper;
+    protected ObjectMapper jsonMapper;
 
-    private WebClient webClient;
+    protected WebClient webClient;
 
-    private DruidConnection() {
+    protected DruidConnection() {
+        jsonMapper = new ObjectMapper();
     }
 
-    public static DruidConnection getConnection(String druidUrl) {
-        DruidConnection druidConnection = new DruidConnection();
-        druidConnection.jsonMapper = new ObjectMapper();
+    protected DruidConnection(String druidUrl) {
+        jsonMapper = new ObjectMapper();
+        webClient = getWebClient(druidUrl);
+    }
 
+    protected WebClient getWebClient(String baseUrl) {
         HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 35000)
-                .responseTimeout(Duration.ofMillis(35000))
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 60000)
+                .responseTimeout(Duration.ofMillis(60000))
                 .doOnConnected(conn ->
-                        conn.addHandlerLast(new ReadTimeoutHandler(35000, TimeUnit.MILLISECONDS))
-                                .addHandlerLast(new WriteTimeoutHandler(35000, TimeUnit.MILLISECONDS)));
+                        conn.addHandlerLast(new ReadTimeoutHandler(60000, TimeUnit.MILLISECONDS))
+                                .addHandlerLast(new WriteTimeoutHandler(60000, TimeUnit.MILLISECONDS)));
         final ExchangeStrategies strategies = ExchangeStrategies.builder()
-                .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(100 * 1024 * 1024))
+                .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(150 * 1024 * 1024))
                 .build();
-        druidConnection.webClient = WebClient.builder()
+        return WebClient.builder()
                 .exchangeStrategies(strategies)
-                .baseUrl(druidUrl)
+                .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .build();
-        return druidConnection;
     }
 
+    public static DruidConnection getConnection(String druidUrl) {
+        return new DruidConnection(druidUrl);
+    }
 
     public String executeQueryRRaw(Query query) {
         String req = null;
@@ -76,7 +80,7 @@ public class DruidConnection {
                 .body(Mono.just(nativeQuery), String.class)
                 .retrieve()
                 .bodyToMono(String.class)
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofSeconds(60))
                 .block();
     }
 

@@ -19,6 +19,7 @@ public class SelectQuery extends Query {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private Filter filter;
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private List<String> dimensions;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
